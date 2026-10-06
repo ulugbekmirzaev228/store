@@ -201,11 +201,11 @@ const SQL_STATEMENTS = [
     "description" TEXT
   );`,
 
-  // 16. Seed Admins
+  // 16. Seed Admins (password: admin123)
   `INSERT INTO "users" ("id", "email", "passwordHash", "name", "phone", "role") VALUES
-    ('usr-admin-1', 'admin@nasiyago.uz', '$2a$10$Wq9f7K8oB6k9mC/P0bQoDeMfvYt1z1V9s9L5b1Y0eO8wG3e3K2O7.', 'Sherzod Aliyev (Bosh admin)', '+998901234567', 'ADMIN'),
-    ('usr-mgr-1', 'manager@nasiyago.uz', '$2a$10$tZ2U6Cqf7r8W9e0.b9c8deRtyuIopAsDfGhJkLzXcVbNmQweRtYu.', 'Azizbek Qodirov (Katta menejer)', '+998907654321', 'MANAGER')
-    ON CONFLICT ("email") DO NOTHING;`,
+    ('usr-admin-1', 'admin@nasiyago.uz', '$2a$10$43A4AYwXHgrazZTFin7b0uQcFB4MgGe0o3rUEA767Z3EDdab8NMNS', 'Sherzod Aliyev (Bosh admin)', '+998901234567', 'ADMIN'),
+    ('usr-mgr-1', 'manager@nasiyago.uz', '$2a$10$43A4AYwXHgrazZTFin7b0uQcFB4MgGe0o3rUEA767Z3EDdab8NMNS', 'Azizbek Qodirov (Katta menejer)', '+998907654321', 'MANAGER')
+    ON CONFLICT ("email") DO UPDATE SET "passwordHash" = EXCLUDED."passwordHash";`,
 
   // 17. Seed Installment Plans
   `INSERT INTO "installment_plans" ("id", "months", "markupPercent", "minDownPaymentPercent", "maxDownPaymentPercent", "isActive") VALUES
