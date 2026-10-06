@@ -32,6 +32,7 @@ export default function HomePage({ params }: { params: { lang: string } }) {
   const [newArrivals, setNewArrivals] = useState<any[]>([]);
   const [brands, setBrands] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'hits' | 'new'>('hits');
+  const [loadingProducts, setLoadingProducts] = useState(true);
 
   // Application Modal state
   const [selectedProductForModal, setSelectedProductForModal] = useState<any>(null);
@@ -43,18 +44,35 @@ export default function HomePage({ params }: { params: { lang: string } }) {
   useEffect(() => {
     async function loadData() {
       try {
+        setLoadingProducts(true);
         const [bannersData, featuredData, brandsData] = await Promise.all([
           fetchApi('/api/v1/banners').catch(() => []),
           fetchApi('/api/v1/products/featured/hits-and-new').catch(() => ({ hits: [], newArrivals: [] })),
           fetchApi('/api/v1/brands').catch(() => []),
         ]);
 
+        let hitsList = featuredData.hits || [];
+        let newArrivalsList = featuredData.newArrivals || [];
+
+        // Fallback: If hits or newArrivals are empty, fetch recent products
+        if (hitsList.length === 0 || newArrivalsList.length === 0) {
+          try {
+            const allProds = await fetchApi('/api/v1/products?limit=16');
+            if (allProds?.items?.length > 0) {
+              if (hitsList.length === 0) hitsList = allProds.items.slice(0, 8);
+              if (newArrivalsList.length === 0) newArrivalsList = allProds.items.slice(0, 8);
+            }
+          } catch (_) {}
+        }
+
         setBanners(bannersData);
-        setHits(featuredData.hits || []);
-        setNewArrivals(featuredData.newArrivals || []);
+        setHits(hitsList);
+        setNewArrivals(newArrivalsList);
         setBrands(brandsData);
       } catch (err) {
         console.error('Home data load error:', err);
+      } finally {
+        setLoadingProducts(false);
       }
     }
 
@@ -324,16 +342,28 @@ export default function HomePage({ params }: { params: { lang: string } }) {
         </div>
 
         {/* Product Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {(activeTab === 'hits' ? hits : newArrivals).map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              lang={lang}
-              onQuickApply={handleQuickApply}
-            />
-          ))}
-        </div>
+        {loadingProducts ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 animate-pulse">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="h-80 bg-white rounded-2xl border border-slate-200/80 shadow-sm" />
+            ))}
+          </div>
+        ) : (activeTab === 'hits' ? hits : newArrivals).length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+            {(activeTab === 'hits' ? hits : newArrivals).map((product) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                lang={lang}
+                onQuickApply={handleQuickApply}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="py-12 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-sm">
+            Hozircha mahsulotlar mavjud emas
+          </div>
+        )}
       </section>
 
       {/* 5. HOW INSTALLMENT WORKS (4 VISUAL STEPS) */}

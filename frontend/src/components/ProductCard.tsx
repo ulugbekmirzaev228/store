@@ -50,9 +50,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, lang, onQuick
       {/* Product Image */}
       <Link href={`/${lang}/product/${product.slug}`} className="block relative pt-4 px-3 sm:pt-6 sm:px-6 pb-2 sm:pb-4 bg-slate-50/50">
         <div className="w-full h-36 sm:h-52 flex items-center justify-center p-1 sm:p-2">
-          {product.primaryImage ? (
+          {product.primaryImage || (product as any).images?.[0]?.imageUrl || (typeof (product as any).images?.[0] === 'string' ? (product as any).images[0] : null) ? (
             <img
-              src={product.primaryImage}
+              src={
+                product.primaryImage ||
+                (product as any).images?.[0]?.imageUrl ||
+                (typeof (product as any).images?.[0] === 'string' ? (product as any).images[0] : '')
+              }
               alt={name}
               className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform duration-300"
               loading="lazy"
