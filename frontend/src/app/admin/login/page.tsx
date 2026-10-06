@@ -25,6 +25,9 @@ export default function AdminLoginPage() {
 
       if (res.token) {
         localStorage.setItem('nasiyago_admin_token', res.token);
+        if (res.user) {
+          localStorage.setItem('nasiyago_admin_user', JSON.stringify(res.user));
+        }
         router.push('/admin/dashboard');
       }
     } catch (err: any) {

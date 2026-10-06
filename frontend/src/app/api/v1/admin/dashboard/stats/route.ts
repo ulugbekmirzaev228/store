@@ -14,11 +14,36 @@ export async function GET(req: NextRequest) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [totalApps, todayApps, approvedApps, inReviewApps, topProducts] = await Promise.all([
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const [
+      totalApps,
+      todayApps,
+      weekApps,
+      approvedApps,
+      inReviewApps,
+      totalProducts,
+      recentApplications,
+      topProducts,
+    ] = await Promise.all([
       prisma.application.count(),
       prisma.application.count({ where: { createdAt: { gte: today } } }),
+      prisma.application.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
       prisma.application.count({ where: { status: 'APPROVED' } }),
       prisma.application.count({ where: { status: 'IN_REVIEW' } }),
+      prisma.product.count({ where: { isPublished: true } }),
+      prisma.application.findMany({
+        take: 6,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: {
+            include: {
+              product: { select: { nameUz: true, nameRu: true } },
+            },
+          },
+        },
+      }),
       prisma.product.findMany({
         take: 5,
         orderBy: { basePrice: 'desc' },
@@ -30,13 +55,27 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
+    const conversionRate =
+      totalApps > 0 ? Number(((approvedApps / totalApps) * 100).toFixed(1)) : 0;
+
+    const metrics = {
+      totalApplications: totalApps,
+      todayApplications: todayApps,
+      weekApplications: weekApps,
+      approvedApplications: approvedApps,
+      conversionRate,
+      totalProducts,
+    };
+
     return NextResponse.json({
+      metrics,
+      recentApplications,
       applications: {
         total: totalApps,
         today: todayApps,
         approved: approvedApps,
         inReview: inReviewApps,
-        conversionRate: totalApps > 0 ? Math.round((approvedApps / totalApps) * 100) : 0,
+        conversionRate,
       },
       topProducts,
     });

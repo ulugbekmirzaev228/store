@@ -24,34 +24,70 @@ import { fetchApi } from '../../lib/api';
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('nasiyago_admin_user');
+        return cached ? JSON.parse(cached) : null;
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState<boolean>(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
     // If on login page, don't guard
-    if (pathname.includes('/admin/login')) return;
+    if (pathname.includes('/admin/login')) {
+      setLoading(false);
+      return;
+    }
 
-    const token = localStorage.getItem('nasiyago_admin_token');
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nasiyago_admin_token') : null;
     if (!token) {
+      setLoading(false);
       router.push('/admin/login');
       return;
     }
 
     fetchApi('/api/v1/auth/me')
-      .then((data) => setUser(data))
-      .catch(() => {
+      .then((data) => {
+        setUser(data);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('nasiyago_admin_user', JSON.stringify(data));
+        }
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Admin auth check failed:', err);
         localStorage.removeItem('nasiyago_admin_token');
+        localStorage.removeItem('nasiyago_admin_user');
+        setLoading(false);
         router.push('/admin/login');
       });
   }, [pathname, router]);
 
   const handleLogout = () => {
     localStorage.removeItem('nasiyago_admin_token');
+    localStorage.removeItem('nasiyago_admin_user');
     router.push('/admin/login');
   };
 
   if (pathname.includes('/admin/login')) {
     return <>{children}</>;
+  }
+
+  if (loading && !user) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-3">
+          <div className="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
+          <div className="text-slate-400 text-xs font-semibold">Admin panel yuklanmoqda...</div>
+        </div>
+      </div>
+    );
   }
 
   const navItems = [
