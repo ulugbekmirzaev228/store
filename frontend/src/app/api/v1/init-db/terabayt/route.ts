@@ -64,76 +64,78 @@ export async function GET(req: NextRequest) {
       );
     });
 
-    // 2. Ensure Categories exist in DB
-    const categoriesMap: Record<string, string> = {
-      'cat-smartphones': 'Smartfonlar',
-      'cat-tablets': 'Planshetlar',
-      'cat-laptops': 'Noutbuklar',
-      'cat-accessories': 'Aksessuarlar',
-    };
+    // 2. Ensure Categories exist in DB (only on first batch)
+    if (offset === 0) {
+      const categoriesMap: Record<string, string> = {
+        'cat-smartphones': 'Smartfonlar',
+        'cat-tablets': 'Planshetlar',
+        'cat-laptops': 'Noutbuklar',
+        'cat-accessories': 'Aksessuarlar',
+      };
 
-    for (const [id, nameUz] of Object.entries(categoriesMap)) {
-      const slug = id.replace('cat-', '');
-      await prisma.category.upsert({
-        where: { id },
-        update: { nameUz, slug },
-        create: {
-          id,
-          nameUz,
-          nameRu:
-            nameUz === 'Smartfonlar'
-              ? 'Смартфоны'
-              : nameUz === 'Planshetlar'
-              ? 'Планшеты'
-              : nameUz === 'Noutbuklar'
-              ? 'Ноутбуки'
-              : 'Аксессуары',
-          slug,
-          icon:
-            nameUz === 'Smartfonlar'
-              ? 'Smartphone'
-              : nameUz === 'Planshetlar'
-              ? 'Tablet'
-              : nameUz === 'Noutbuklar'
-              ? 'Laptop'
-              : 'Headphones',
-          order: 1,
+      for (const [id, nameUz] of Object.entries(categoriesMap)) {
+        const slug = id.replace('cat-', '');
+        await prisma.category.upsert({
+          where: { id },
+          update: { nameUz, slug },
+          create: {
+            id,
+            nameUz,
+            nameRu:
+              nameUz === 'Smartfonlar'
+                ? 'Смартфоны'
+                : nameUz === 'Planshetlar'
+                ? 'Планшеты'
+                : nameUz === 'Noutbuklar'
+                ? 'Ноутбуки'
+                : 'Аксессуары',
+            slug,
+            icon:
+              nameUz === 'Smartfonlar'
+                ? 'Smartphone'
+                : nameUz === 'Planshetlar'
+                ? 'Tablet'
+                : nameUz === 'Noutbuklar'
+                ? 'Laptop'
+                : 'Headphones',
+            order: 1,
+          },
+        });
+      }
+
+      // 3. Ensure Brands exist in DB (only on first batch)
+      const brandsMap: Record<string, { name: string; slug: string; logo: string }> = {
+        'brd-apple': {
+          name: 'Apple',
+          slug: 'apple',
+          logo: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg',
         },
-      });
-    }
-
-    // 3. Ensure Brands exist in DB
-    const brandsMap: Record<string, { name: string; slug: string; logo: string }> = {
-      'brd-apple': {
-        name: 'Apple',
-        slug: 'apple',
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg',
-      },
-      'brd-samsung': {
-        name: 'Samsung',
-        slug: 'samsung',
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/2/24/Samsung_Logo.svg',
-      },
-      'brd-xiaomi': {
-        name: 'Xiaomi',
-        slug: 'xiaomi',
-        logo: 'https://upload.wikimedia.org/wikipedia/commons/a/ae/Xiaomi_logo_%282021-%29.svg',
-      },
-    };
-
-    for (const [id, b] of Object.entries(brandsMap)) {
-      await prisma.brand.upsert({
-        where: { id },
-        update: { name: b.name, slug: b.slug, logoUrl: b.logo },
-        create: {
-          id,
-          name: b.name,
-          slug: b.slug,
-          logoUrl: b.logo,
-          isFeatured: true,
-          order: 1,
+        'brd-samsung': {
+          name: 'Samsung',
+          slug: 'samsung',
+          logo: 'https://upload.wikimedia.org/wikipedia/commons/2/24/Samsung_Logo.svg',
         },
-      });
+        'brd-xiaomi': {
+          name: 'Xiaomi',
+          slug: 'xiaomi',
+          logo: 'https://upload.wikimedia.org/wikipedia/commons/a/ae/Xiaomi_logo_%282021-%29.svg',
+        },
+      };
+
+      for (const [id, b] of Object.entries(brandsMap)) {
+        await prisma.brand.upsert({
+          where: { id },
+          update: { name: b.name, slug: b.slug, logoUrl: b.logo },
+          create: {
+            id,
+            name: b.name,
+            slug: b.slug,
+            logoUrl: b.logo,
+            isFeatured: true,
+            order: 1,
+          },
+        });
+      }
     }
 
     // 4. Slice batch
