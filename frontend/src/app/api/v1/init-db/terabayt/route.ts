@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../../../../lib/prisma';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Allow enough time for importing all products
 
 function parseCharacteristics(chars: string | undefined | null) {
   if (!chars || typeof chars !== 'string') return [];
@@ -33,6 +32,9 @@ export async function GET(req: NextRequest) {
   if (secret !== 'nasiyago_init_2026') {
     return NextResponse.json({ message: 'Notoʻgʻri maxfiy kalit' }, { status: 401 });
   }
+
+  const offset = parseInt(req.nextUrl.searchParams.get('offset') || '0', 10);
+  const limit = parseInt(req.nextUrl.searchParams.get('limit') || '5', 10);
 
   try {
     // 1. Fetch catalog from Terabayt
@@ -78,9 +80,23 @@ export async function GET(req: NextRequest) {
         create: {
           id,
           nameUz,
-          nameRu: nameUz === 'Smartfonlar' ? 'Смартфоны' : nameUz === 'Planshetlar' ? 'Планшеты' : nameUz === 'Noutbuklar' ? 'Ноутбуки' : 'Аксессуары',
+          nameRu:
+            nameUz === 'Smartfonlar'
+              ? 'Смартфоны'
+              : nameUz === 'Planshetlar'
+              ? 'Планшеты'
+              : nameUz === 'Noutbuklar'
+              ? 'Ноутбуки'
+              : 'Аксессуары',
           slug,
-          icon: nameUz === 'Smartfonlar' ? 'Smartphone' : nameUz === 'Planshetlar' ? 'Tablet' : nameUz === 'Noutbuklar' ? 'Laptop' : 'Headphones',
+          icon:
+            nameUz === 'Smartfonlar'
+              ? 'Smartphone'
+              : nameUz === 'Planshetlar'
+              ? 'Tablet'
+              : nameUz === 'Noutbuklar'
+              ? 'Laptop'
+              : 'Headphones',
           order: 1,
         },
       });
@@ -120,10 +136,11 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 4. Process each product
+    // 4. Slice batch
+    const currentBatch = nonDyson.slice(offset, offset + limit);
     const importedProducts = [];
 
-    for (const p of nonDyson) {
+    for (const p of currentBatch) {
       try {
         const detailRes = await fetch(`https://api.terabayt.uz/api/products/${p.slug}?lang=uz`, {
           headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
@@ -163,8 +180,12 @@ export async function GET(req: NextRequest) {
         }
 
         const basePrice = Number(detail.minPrice || p.minPrice || 1000000);
-        const descriptionUz = detail.description || `${detail.name} — eng soʻnggi modeldagi original gadjet. Toshkentda 12 oygacha qulay nasiya asosida.`;
-        const descriptionRu = detail.description || `${detail.name} — оригинальный гаджет с официальной гарантией. Рассрочка в Ташкенте без банка.`;
+        const descriptionUz =
+          detail.description ||
+          `${detail.name} — eng soʻnggi modeldagi original gadjet. Toshkentda 12 oygacha qulay nasiya asosida.`;
+        const descriptionRu =
+          detail.description ||
+          `${detail.name} — оригинальный гаджет с официальной гарантией. Рассрочка в Ташкенте без банка.`;
 
         // Upsert Product
         const product = await prisma.product.upsert({
@@ -179,7 +200,12 @@ export async function GET(req: NextRequest) {
             descriptionRu,
             isPublished: true,
             isHit: Boolean((detail.rating && detail.rating > 4) || basePrice > 12000000),
-            isNew: Boolean(p.slug.includes('17') || p.slug.includes('s26') || p.slug.includes('m5') || p.slug.includes('16')),
+            isNew: Boolean(
+              p.slug.includes('17') ||
+                p.slug.includes('s26') ||
+                p.slug.includes('m5') ||
+                p.slug.includes('16')
+            ),
           },
           create: {
             slug: p.slug,
@@ -192,12 +218,18 @@ export async function GET(req: NextRequest) {
             descriptionRu,
             isPublished: true,
             isHit: Boolean((detail.rating && detail.rating > 4) || basePrice > 12000000),
-            isNew: Boolean(p.slug.includes('17') || p.slug.includes('s26') || p.slug.includes('m5') || p.slug.includes('16')),
+            isNew: Boolean(
+              p.slug.includes('17') ||
+                p.slug.includes('s26') ||
+                p.slug.includes('m5') ||
+                p.slug.includes('16')
+            ),
           },
         });
 
         // Images
-        const imagesList = (detail.images && detail.images.length > 0) ? detail.images : p.images || [];
+        const imagesList =
+          detail.images && detail.images.length > 0 ? detail.images : p.images || [];
         if (imagesList.length > 0) {
           await prisma.productImage.deleteMany({ where: { productId: product.id } });
           await prisma.productImage.createMany({
@@ -217,7 +249,8 @@ export async function GET(req: NextRequest) {
         if (variantsList.length > 0) {
           const formattedVariants = variantsList.map((v: any, idx: number) => {
             const colorSel = v.selection?.find(
-              (s: any) => (s.option && s.option.toLowerCase().includes('rang')) || s.optionKey === 'rang'
+              (s: any) =>
+                (s.option && s.option.toLowerCase().includes('rang')) || s.optionKey === 'rang'
             );
             const romSel = v.selection?.find(
               (s: any) =>
@@ -292,10 +325,17 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const hasMore = offset + limit < nonDyson.length;
+    const nextOffset = hasMore ? offset + limit : null;
+
     return NextResponse.json({
       success: true,
-      message: `${importedProducts.length} ta mahsulot muvaffaqiyatli import qilindi! (Dyson chiqarib tashlandi)`,
-      totalImported: importedProducts.length,
+      offset,
+      limit,
+      totalNonDyson: nonDyson.length,
+      importedInThisBatch: importedProducts.length,
+      hasMore,
+      nextOffset,
       products: importedProducts,
     });
   } catch (err: any) {
