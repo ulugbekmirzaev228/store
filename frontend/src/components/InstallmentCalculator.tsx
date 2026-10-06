@@ -14,6 +14,88 @@ interface InstallmentCalculatorProps {
   onApplyClick?: (termMonths: number, downPaymentAmount: number, monthlyPayment: number, totalPrice: number) => void;
 }
 
+// Local calculation helper for instant rendering and offline/fast updates
+function calculateLocally(
+  price: number,
+  termMonths: number,
+  downPaymentPercent: number,
+  customMarkupPercent?: number | null
+) {
+  const numPrice = Number(price) || 0;
+  const numMonths = Number(termMonths) || 12;
+  const numDownPct = Number(downPaymentPercent) || 0;
+
+  if (numPrice <= 0 || !numMonths) {
+    return {
+      price: 0,
+      cashPrice: 0,
+      termMonths: 12,
+      months: 12,
+      markupPercent: 24,
+      downPaymentAmount: 0,
+      downPayment: 0,
+      downPaymentPercent: 0,
+      loanAmount: 0,
+      overpayment: 0,
+      totalPrice: 0,
+      monthlyPayment: 0,
+      schedule: [],
+    };
+  }
+
+  const defaultRates: Record<number, number> = {
+    3: 0,
+    6: 12,
+    9: 18,
+    12: 24,
+  };
+
+  const markupPercent =
+    customMarkupPercent !== null && customMarkupPercent !== undefined
+      ? Number(customMarkupPercent)
+      : (defaultRates[numMonths] ?? 24);
+
+  const downPaymentAmount = Math.round((numPrice * Math.min(70, Math.max(0, numDownPct))) / 100);
+  const remainingCashPrice = numPrice - downPaymentAmount;
+  const overpayment = Math.round((remainingCashPrice * markupPercent) / 100);
+  const loanAmount = remainingCashPrice + overpayment;
+  const monthlyPayment = Math.round(loanAmount / numMonths);
+  const totalPrice = downPaymentAmount + loanAmount;
+
+  const schedule = [];
+  const now = new Date();
+  for (let i = 1; i <= numMonths; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + i, now.getDate());
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const dueDate = `${day}.${month}.${year}`;
+    schedule.push({
+      month: i,
+      monthIndex: i,
+      dueDate,
+      paymentDate: dueDate,
+      amount: monthlyPayment,
+    });
+  }
+
+  return {
+    price: numPrice,
+    cashPrice: numPrice,
+    termMonths: numMonths,
+    months: numMonths,
+    markupPercent,
+    downPaymentAmount,
+    downPayment: downPaymentAmount,
+    downPaymentPercent: numDownPct,
+    loanAmount,
+    overpayment,
+    totalPrice,
+    monthlyPayment,
+    schedule,
+  };
+}
+
 export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
   price,
   productName,
@@ -26,7 +108,9 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
   const [termMonths, setTermMonths] = useState<number>(12);
   const [downPaymentPercent, setDownPaymentPercent] = useState<number>(0);
   const [showSchedule, setShowSchedule] = useState<boolean>(false);
-  const [calculation, setCalculation] = useState<any>(null);
+  const [calculation, setCalculation] = useState<any>(() =>
+    calculateLocally(price, 12, 0, customMarkupPercent)
+  );
   const [loading, setLoading] = useState<boolean>(false);
 
   // Available term options
@@ -34,6 +118,10 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
   const quickDownPayments = [0, 10, 20, 30, 50];
 
   useEffect(() => {
+    // Immediately calculate locally so the user never sees 0 or loading lag
+    const instant = calculateLocally(price, termMonths, downPaymentPercent, customMarkupPercent);
+    setCalculation(instant);
+
     let isCancelled = false;
 
     async function calculate() {
@@ -44,16 +132,17 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
           body: JSON.stringify({
             price,
             termMonths,
+            months: termMonths,
             downPaymentPercent,
             customMarkupPercent: customMarkupPercent || undefined,
           }),
         });
 
-        if (!isCancelled) {
+        if (!isCancelled && res && typeof res.monthlyPayment === 'number') {
           setCalculation(res);
         }
       } catch (err) {
-        console.error('Calculation error:', err);
+        console.error('Calculation API error (fallback to local calculation):', err);
       } finally {
         if (!isCancelled) setLoading(false);
       }
@@ -118,7 +207,7 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
             {t.calculator.downPayment}
           </label>
           <span className="text-sm font-bold text-slate-800">
-            {downPaymentPercent}% ({formatSom(calculation?.downPaymentAmount || 0)})
+            {downPaymentPercent}% ({formatSom(calculation?.downPaymentAmount || calculation?.downPayment || 0)})
           </span>
         </div>
 
@@ -211,10 +300,10 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
               <div>{t.calculator.dateCol}</div>
               <div className="text-right">{t.calculator.amountCol}</div>
             </div>
-            {calculation.schedule.map((item: any) => (
-              <div key={item.month} className="grid grid-cols-3 px-3 py-2 text-slate-700">
-                <div className="font-semibold">{item.month}-oy</div>
-                <div className="text-slate-500">{item.dueDate}</div>
+            {calculation.schedule.map((item: any, idx: number) => (
+              <div key={item.month || item.monthIndex || idx} className="grid grid-cols-3 px-3 py-2 text-slate-700">
+                <div className="font-semibold">{item.month || item.monthIndex || idx + 1}-oy</div>
+                <div className="text-slate-500">{item.dueDate || item.paymentDate}</div>
                 <div className="text-right font-bold text-slate-900">{formatSom(item.amount)}</div>
               </div>
             ))}
@@ -230,13 +319,13 @@ export const InstallmentCalculator: React.FC<InstallmentCalculatorProps> = ({
             if (onApplyClick && calculation) {
               onApplyClick(
                 termMonths,
-                calculation.downPaymentAmount,
+                calculation.downPaymentAmount ?? calculation.downPayment ?? 0,
                 calculation.monthlyPayment,
                 calculation.totalPrice
               );
             }
           }}
-          className="w-full py-3.5 sm:py-4 px-6 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.99] text-white font-extrabold text-base transition shadow-lg shadow-brand-500/25 flex items-center justify-center space-x-2"
+          className="w-full py-3.5 sm:py-4 px-6 rounded-xl bg-brand-600 hover:bg-brand-700 active:scale-[0.99] text-white font-extrabold text-base transition shadow-lg shadow-brand-500/25 flex items-center justify-center space-x-2 cursor-pointer"
         >
           <span>{t.calculator.buyInInstallment}</span>
         </button>
