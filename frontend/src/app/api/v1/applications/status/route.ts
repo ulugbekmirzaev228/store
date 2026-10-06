@@ -18,7 +18,14 @@ export async function GET(req: NextRequest) {
       where.applicationNumber = applicationNumber.trim().toUpperCase();
     }
     if (phone) {
-      where.phone = { contains: phone.trim().replace(/\D/g, '') };
+      const raw = phone.trim();
+      const digits = raw.replace(/\D/g, '');
+      const last7 = digits.length >= 7 ? digits.slice(-7) : digits;
+      where.OR = [
+        { phone: { contains: raw } },
+        { phone: { contains: digits } },
+        ...(last7 ? [{ phone: { contains: last7 } }] : []),
+      ];
     }
 
     const applications = await prisma.application.findMany({

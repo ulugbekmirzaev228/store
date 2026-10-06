@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
           assignedManager: { select: { id: true, name: true } },
           items: { include: { product: true, variant: true } },
           statusLogs: { orderBy: { createdAt: 'desc' } },
+          branch: true,
         },
       }),
     ]);

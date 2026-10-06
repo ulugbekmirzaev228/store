@@ -526,7 +526,7 @@ export default function CatalogPage({ params }: { params: { lang: string } }) {
             setSelectedProductForModal(null);
           }}
           product={selectedProductForModal}
-          selectedVariant={{ id: selectedProductForModal.id, colorUz: 'Standart', memoryRom: '256 GB' }}
+          selectedVariant={selectedProductForModal.variants?.[0] || { id: selectedProductForModal.id, colorUz: 'Standart', memoryRom: '256 GB', price: selectedProductForModal.basePrice }}
           initialTermMonths={12}
           initialMonthlyPayment={selectedProductForModal.minMonthlyPayment || Math.round((selectedProductForModal.basePrice * 1.28) / 12)}
           initialTotalPrice={Math.round(selectedProductForModal.basePrice * 1.28)}

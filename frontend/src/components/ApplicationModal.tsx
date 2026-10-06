@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { X, CheckCircle2, Truck, Store, Clock, ShieldCheck, AlertCircle } from 'lucide-react';
 import { formatSom } from '../lib/currency';
@@ -55,11 +55,23 @@ export const ApplicationModal: React.FC<ApplicationModalProps> = ({
   const [preferredContactTime, setPreferredContactTime] = useState('10:00 - 13:00');
   const [deliveryMethod, setDeliveryMethod] = useState<'DELIVERY' | 'PICKUP'>('DELIVERY');
   const [branchId, setBranchId] = useState('');
+  const [branches, setBranches] = useState<any[]>([]);
   const [consentAgreed, setConsentAgreed] = useState(true);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successData, setSuccessData] = useState<any>(null);
+
+  useEffect(() => {
+    fetchApi('/api/v1/branches')
+      .then((data: any[]) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setBranches(data);
+          setBranchId(data[0].id);
+        }
+      })
+      .catch((err) => console.error('Failed to load branches:', err));
+  }, []);
 
   if (!isOpen) return null;
 
@@ -98,22 +110,41 @@ export const ApplicationModal: React.FC<ApplicationModalProps> = ({
 
     try {
       setIsSubmitting(true);
+
+      const price = Number(selectedVariant?.price || product?.basePrice) || 0;
+      const downPay = Number(initialDownPayment) || 0;
+      const term = Number(initialTermMonths) || 12;
+
+      const rate = { 3: 0, 6: 0.12, 9: 0.18, 12: 0.24, 24: 0.40 }[term] ?? 0.24;
+      const principal = Math.max(0, price - downPay);
+      const loan = principal + Math.round(principal * rate);
+      const calculatedTotal = downPay + loan;
+      const calculatedMonthly = Math.round(loan / term);
+
+      const sendTotalPrice = Number(initialTotalPrice) > 0 ? Number(initialTotalPrice) : calculatedTotal;
+      const sendMonthly = Number(initialMonthlyPayment) > 0 ? Number(initialMonthlyPayment) : calculatedMonthly;
+      const sendLoan = Math.max(0, sendTotalPrice - downPay);
+
       const res = await fetchApi('/api/v1/applications', {
         method: 'POST',
         body: JSON.stringify({
-          customerName,
-          phone,
-          district,
-          address: deliveryMethod === 'DELIVERY' ? address : 'Doʻkondan olib ketish',
-          passportSeries: passportSeries || undefined,
+          customerName: customerName.trim(),
+          phone: phone.trim(),
+          district: deliveryMethod === 'DELIVERY' ? district : 'Toshkent shahri',
+          address: deliveryMethod === 'DELIVERY' ? address.trim() : 'Doʻkondan olib ketish',
+          passportSeries: passportSeries.trim() || undefined,
           preferredContactTime,
           deliveryMethod,
-          branchId: branchId || undefined,
+          branchId: deliveryMethod === 'PICKUP' && branchId ? branchId : undefined,
           consentAgreed,
           productId: product.id,
-          variantId: selectedVariant.id,
-          termMonths: initialTermMonths,
-          downPaymentAmount: initialDownPayment,
+          variantId: selectedVariant?.id || product.id,
+          termMonths: term,
+          downPayment: downPay,
+          downPaymentAmount: downPay,
+          totalPrice: sendTotalPrice,
+          loanAmount: sendLoan,
+          monthlyPayment: sendMonthly,
         }),
       });
 
@@ -363,9 +394,19 @@ export const ApplicationModal: React.FC<ApplicationModalProps> = ({
                     onChange={(e) => setBranchId(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-brand-500 text-slate-800 bg-white outline-none"
                   >
-                    <option value="">Chilonzor filiali (Bunyodkor 42)</option>
-                    <option value="">Yunusobod filiali (Amir Temur 107B)</option>
-                    <option value="">Malika savdo majmuasi (B-blok 24)</option>
+                    {branches.length > 0 ? (
+                      branches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {lang === 'ru' ? b.nameRu : b.nameUz} ({lang === 'ru' ? b.addressRu : b.addressUz})
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="">Chilonzor filiali (Bunyodkor 42)</option>
+                        <option value="">Yunusobod filiali (Amir Temur 107B)</option>
+                        <option value="">Malika savdo majmuasi (B-blok 24)</option>
+                      </>
+                    )}
                   </select>
                 </div>
               )}
