@@ -1,0 +1,258 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         String        @default("OPERATOR") // ADMIN, MANAGER, OPERATOR
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  assignedApps Application[] @relation("AssignedManager")
+  statusLogs   ApplicationStatusLog[]
+
+  @@map("users")
+}
+
+model Brand {
+  id         String    @id @default(uuid())
+  name       String    @unique
+  slug       String    @unique
+  logoUrl    String?
+  isFeatured Boolean   @default(false)
+  order      Int       @default(0)
+  products   Product[]
+  createdAt  DateTime  @default(now())
+
+  @@map("brands")
+}
+
+model Category {
+  id        String     @id @default(uuid())
+  nameUz    String
+  nameRu    String
+  slug      String     @unique
+  icon      String?
+  parentId  String?
+  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryHierarchy")
+  order     Int        @default(0)
+  products  Product[]
+  createdAt DateTime   @default(now())
+
+  @@map("categories")
+}
+
+model Product {
+  id                    String            @id @default(uuid())
+  brandId               String
+  brand                 Brand             @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  categoryId            String
+  category              Category          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  nameUz                String
+  nameRu                String
+  slug                  String            @unique
+  descriptionUz         String
+  descriptionRu         String
+  basePrice             Float
+  isHit                 Boolean           @default(false)
+  isNew                 Boolean           @default(false)
+  isPublished           Boolean           @default(true)
+  
+  // Custom installment markup / down payment override per product (optional)
+  customMarkupPercent   Float?
+  minDownPaymentPercent Float?
+  
+  variants              ProductVariant[]
+  specs                 ProductSpec[]
+  images                ProductImage[]
+  applicationItems      ApplicationItem[]
+  
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([slug])
+  @@index([brandId])
+  @@index([categoryId])
+  @@map("products")
+}
+
+model ProductVariant {
+  id          String            @id @default(uuid())
+  productId   String
+  product     Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku         String            @unique
+  colorUz     String
+  colorRu     String
+  colorCode   String            // Hex code e.g. #25282A
+  memoryRam   String?           // e.g. "8 GB", "12 GB"
+  memoryRom   String?           // e.g. "128 GB", "256 GB", "512 GB"
+  condition   String            @default("NEW") // NEW, USED
+  price       Float
+  oldPrice    Float?
+  stock       Int               @default(0)
+  isDefault   Boolean           @default(false)
+  images      ProductImage[]
+  appItems    ApplicationItem[]
+  createdAt   DateTime          @default(now())
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model ProductImage {
+  id         String          @id @default(uuid())
+  productId  String
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId  String?
+  variant    ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  imageUrl   String
+  isPrimary  Boolean         @default(false)
+  order      Int             @default(0)
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+model ProductSpec {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  groupUz   String   // e.g. "Ekran", "Kamera", "Batareya"
+  groupRu   String
+  labelUz   String   // e.g. "Diagonal", "Asosiy kamera", "Sig'im"
+  labelRu   String
+  valueUz   String   // e.g. "6.7 dyuym OLED 120Hz"
+  valueRu   String
+  order     Int      @default(0)
+
+  @@index([productId])
+  @@map("product_specs")
+}
+
+model InstallmentPlan {
+  id                    String   @id @default(uuid())
+  months                Int      @unique // 3, 6, 9, 12
+  markupPercent         Float    // e.g. 0% for 3m, 12% for 6m, 18% for 9m, 24% for 12m
+  minDownPaymentPercent Float    @default(0)
+  maxDownPaymentPercent Float    @default(50)
+  isActive              Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("installment_plans")
+}
+
+model Application {
+  id                   String                 @id @default(uuid())
+  applicationNumber    String                 @unique // e.g. "NG-2026-0001"
+  customerName         String
+  phone                String
+  district             String                 // Tashkent district (Chilonzor, Yunusobod, etc.)
+  address              String
+  passportSeries       String?                // Optional series/number (toggle in admin)
+  preferredContactTime String?
+  comment              String?
+  deliveryMethod       String                 @default("DELIVERY") // DELIVERY, PICKUP
+  branchId             String?
+  branch               Branch?                @relation(fields: [branchId], references: [id])
+  termMonths           Int                    // 3, 6, 9, 12
+  downPayment          Float
+  totalPrice           Float
+  loanAmount           Float
+  monthlyPayment       Float
+  status               String                 @default("NEW") // NEW, IN_REVIEW, APPROVED, REJECTED, DELIVERED, CANCELLED
+  assignedManagerId    String?
+  assignedManager      User?                  @relation("AssignedManager", fields: [assignedManagerId], references: [id])
+  internalNotes        String?
+  items                ApplicationItem[]
+  statusLogs           ApplicationStatusLog[]
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  @@index([phone])
+  @@index([applicationNumber])
+  @@index([status])
+  @@map("applications")
+}
+
+model ApplicationItem {
+  id            String         @id @default(uuid())
+  applicationId String
+  application   Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product        @relation(fields: [productId], references: [id])
+  variantId     String
+  variant       ProductVariant @relation(fields: [variantId], references: [id])
+  quantity      Int            @default(1)
+  unitPrice     Float
+
+  @@map("application_items")
+}
+
+model ApplicationStatusLog {
+  id            String      @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  oldStatus     String?
+  newStatus     String
+  changedById   String?
+  changedBy     User?       @relation(fields: [changedById], references: [id])
+  comment       String?
+  createdAt     DateTime    @default(now())
+
+  @@map("application_status_logs")
+}
+
+model Banner {
+  id               String   @id @default(uuid())
+  titleUz          String
+  titleRu          String
+  subtitleUz       String?
+  subtitleRu       String?
+  badgeUz          String?
+  badgeRu          String?
+  linkUrl          String
+  imageUrlDesktop  String
+  imageUrlMobile   String
+  isActive         Boolean  @default(true)
+  order            Int      @default(0)
+
+  @@map("banners")
+}
+
+model Branch {
+  id           String        @id @default(uuid())
+  nameUz       String
+  nameRu       String
+  addressUz    String
+  addressRu    String
+  workingHours String
+  phone        String
+  latitude     Float
+  longitude    Float
+  isActive     Boolean       @default(true)
+  applications Application[]
+
+  @@map("branches")
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+
+  @@map("system_settings")
+}
